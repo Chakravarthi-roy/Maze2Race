@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pathfinder</title>
+<title>Maze2Race</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -19,28 +19,32 @@
     height: 56px;
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 14px;
     padding: 0 20px;
     border-bottom: 1px solid #e2e2e2;
     background: #fafafa;
+    position: relative;
+    z-index: 30;
   }
 
   header h1 {
     font-size: 16px;
     font-weight: 600;
     color: #1a1a1a;
-    margin-right: 8px;
+    margin-right: 4px;
+    white-space: nowrap;
   }
 
-  .board-select {
+  .field {
     display: flex;
     align-items: center;
     gap: 8px;
   }
 
-  .board-select label {
+  .field label {
     font-size: 13px;
     color: #555;
+    white-space: nowrap;
   }
 
   select {
@@ -54,10 +58,35 @@
 
   select:focus { outline: 2px solid #2284e6; outline-offset: 1px; }
 
-  .status {
+  button {
+    font-size: 13px;
+    font-weight: 500;
+    padding: 7px 16px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    background: #fff;
+    cursor: pointer;
+  }
+
+  button:hover { background: #f0f0f0; }
+  button:active { background: #e6e6e6; }
+
+  .controls {
     margin-left: auto;
-    font-size: 12px;
-    color: #888;
+    display: flex;
+    gap: 8px;
+  }
+
+  #runBtn {
+    background: #2284e6;
+    border-color: #2284e6;
+    color: #fff;
+  }
+  #runBtn:hover { background: #1c6fc0; }
+  #runBtn:disabled {
+    background: #9bb9d9;
+    border-color: #9bb9d9;
+    cursor: not-allowed;
   }
 
   #board-wrap {
@@ -65,18 +94,124 @@
     height: calc(100% - 56px);
     display: block;
     overflow: hidden;
+    position: relative;
   }
 
   canvas {
     display: block;
+  }
+
+  /* --- results: a narrow scroll-like card, centered, unrolling from the top --- */
+
+  #results {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    z-index: 20;
+    width: 360px;
+    max-width: 90vw;
+    background: #fdfbf6;
+    border: 1px solid #e6e1d3;
+    border-top: none;
+    border-radius: 0 0 14px 14px;
+    box-shadow: 0 14px 32px rgba(0,0,0,0.14);
+    padding: 22px 26px 8px;
+    transform: translate(-50%, -100%);
+    transition: transform 0.36s cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+
+  #results.open {
+    transform: translate(-50%, 0);
+  }
+
+  #results-headline {
+    text-align: center;
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: #1a1a1a;
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e6e1d3;
+  }
+
+  #results-headline.no-path {
+    color: #a33a3a;
+  }
+
+  #results-row {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .stat {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  }
+
+  .stat-label {
+    font-size: 12.5px;
+    color: #7a7468;
+    letter-spacing: 0.02em;
+  }
+
+  .stat-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: #2a2a2a;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  }
+
+  .legend {
+    display: flex;
+    justify-content: center;
+    gap: 18px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid #e6e1d3;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    color: #7a7468;
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  }
+
+  .legend-swatch {
+    width: 11px;
+    height: 11px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  #collapseBtn {
+    display: flex;
+    justify-content: center;
+    padding: 8px 0 2px;
+    cursor: pointer;
+    color: #b3ab98;
+  }
+
+  #collapseBtn:hover { color: #7a7468; }
+
+  #collapseBtn svg {
+    width: 16px;
+    height: 16px;
   }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Pathfinder</h1>
-  <div class="board-select">
+  <h1>Maze2Race</h1>
+  <div class="field">
     <label for="boardPicker">Board</label>
     <select id="boardPicker">
       <option value="open" selected>1 — Open field</option>
@@ -84,15 +219,66 @@
       <option value="unreachable">3 — Unreachable</option>
     </select>
   </div>
-  <div class="status" id="status">drag the red or blue dot</div>
+  <div class="field">
+    <label for="algoPicker">Algorithm</label>
+    <select id="algoPicker">
+      <option value="dijkstra" selected>Dijkstra</option>
+      <option value="astar">A*</option>
+      <option value="bfs">BFS</option>
+    </select>
+  </div>
+  <div class="controls">
+    <button id="resetBtn">Reset</button>
+    <button id="runBtn">Run</button>
+  </div>
 </header>
 
 <div id="board-wrap">
   <canvas id="canvas"></canvas>
+
+  <div id="results">
+    <div id="results-headline">Path found</div>
+    <div id="results-row">
+      <div class="stat">
+        <span class="stat-label">Final path nodes</span>
+        <span class="stat-value" id="statPathNodes">—</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Extra nodes explored</span>
+        <span class="stat-value" id="statExtraNodes">—</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Path cost</span>
+        <span class="stat-value" id="statCost">—</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Time taken</span>
+        <span class="stat-value" id="statTime">—</span>
+      </div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item">
+        <span class="legend-swatch" style="background:#b9aef7;"></span>
+        Explored
+      </div>
+      <div class="legend-item">
+        <span class="legend-swatch" style="background:#f9c64a;"></span>
+        Final path
+      </div>
+    </div>
+
+    <div id="collapseBtn" title="Hide results">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M18 15l-6-6-6 6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+  </div>
 </div>
 
 <script src="boards.js"></script>
 <script src="grid.js"></script>
+<script src="algo-bundle.js"></script>
 <script src="main.js"></script>
 </body>
 </html>

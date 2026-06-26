@@ -20,6 +20,11 @@ class Grid {
     this.end = { col: 0, row: 0 };
 
     this.dragging = null;       // "start" | "end" | null
+
+    // Last run's result, set by main.js after calling an algorithm.
+    // { visitedNodesInOrder: [{col,row}], path: [{col,row}], pathFound, totalCost }
+    // Coordinates only - the Grid doesn't need to know algorithm internals.
+    this.result = null;
   }
 
   loadBoard(boardKey) {
@@ -28,7 +33,49 @@ class Grid {
     this.start = { ...board.start };
     this.end = { ...board.end };
     this.showGridLines = board.showGridLines;
+    this.result = null;
     this.resize();
+  }
+
+  clearResult() {
+    this.result = null;
+    this.draw();
+  }
+
+  // Builds a fresh PathNode[][] grid (matching the shape algo-bundle.js
+  // expects) from this Grid's current wall layout. A fresh grid is built
+  // every run so previous isVisited/distance values never leak between runs.
+  toPathNodeGrid() {
+    const grid = [];
+    for (let row = 0; row < this.rows; row++) {
+      const r = [];
+      for (let col = 0; col < this.cols; col++) {
+        r.push({
+          col: col,
+          row: row,
+          isWall: this.walls[row][col] === 1,
+          isVisited: false,
+          weight: 1,
+          distance: Infinity,
+          gScore: Infinity,
+          hScore: 0,
+          fScore: Infinity,
+          previousNode: null,
+          neighbours: [],
+        });
+      }
+      grid.push(r);
+    }
+    for (let row = 0; row < this.rows; row++) {
+      for (let col = 0; col < this.cols; col++) {
+        const node = grid[row][col];
+        if (row > 0) node.neighbours.push(grid[row - 1][col]);
+        if (row < this.rows - 1) node.neighbours.push(grid[row + 1][col]);
+        if (col > 0) node.neighbours.push(grid[row][col - 1]);
+        if (col < this.cols - 1) node.neighbours.push(grid[row][col + 1]);
+      }
+    }
+    return grid;
   }
 
   isWall(col, row) {
@@ -98,6 +145,20 @@ class Grid {
         if (this.walls[row][col] === 1) {
           ctx.fillRect(col * this.cellSize, row * this.cellSize, this.cellSize, this.cellSize);
         }
+      }
+    }
+
+    // result coloring: explored cells first, then the final path drawn
+    // on top of them (a path cell is always also an explored cell, so
+    // draw order matters - path color must win).
+    if (this.result) {
+      ctx.fillStyle = "#b9aef7";
+      for (const node of this.result.visitedNodesInOrder) {
+        ctx.fillRect(node.col * this.cellSize, node.row * this.cellSize, this.cellSize, this.cellSize);
+      }
+      ctx.fillStyle = "#f9c64a";
+      for (const node of this.result.path) {
+        ctx.fillRect(node.col * this.cellSize, node.row * this.cellSize, this.cellSize, this.cellSize);
       }
     }
 
